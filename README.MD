@@ -1,4 +1,10 @@
 # Protocole Réseau
+## Auteurs 
+Théo LE BAIL
+Lilian Forget
+Romain Pipon
+Laure Boudaud
+
 
 ## Fonctionnement
 Des messages sont envoyés dans un anneau.
