@@ -6,51 +6,104 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <time.h>
 
-struct Packet {
-    int token;
-    int source;
-    int destination;
-    char payload[255];
+
+char* duck_messages[] = {
+    "Coucou ! Je suis un canard, et toi ?",
+    "Moi aussi, je suis un canard ! Quel étang préfères-tu ?",
+    "J'adore l'étang près du vieux moulin. Et toi ?",
+    "Ah, je préfère celui près de la forêt, il y a toujours de la nourriture là-bas.",
+    "As-tu déjà rencontré ce drôle de canard blanc avec le chapeau ?",
+    "Oui, je l'ai vu l'autre jour ! Il est vraiment amusant.",
+    "Oh, il commence à pleuvoir. Allons nous abriter sous les arbres.",
+    "Bonne idée ! Je déteste être mouillé, même si je suis un canard.",
+    "Après la pluie, on pourrait chercher des escargots à manger, qu'en dis-tu ?",
+    "Excellente idée, j'adore les escargots ! À tout à l'heure, alors."
 };
 
+
+struct Paquet {
+    int token;
+    int source[3];
+    int destination[3];
+    char payload[3][255];
+};
 
 int udpPortReception;
 int udpPortEnvoie;
 
-
-int lePacketMestDestiner(struct Packet* packet) {
-    return packet->destination == udpPortReception;
+char* getRandomDuckMessage() {
+    int index = rand() % 10;
+    return duck_messages[index];
 }
 
-int lePacketPossedeUnMessage(struct Packet* packet) {
-    return packet->token;
+int lePaquetMestDestiner(struct Paquet* paquet, int index) {
+    return paquet->destination[index] == udpPortReception;
 }
 
+int lePaquetPossedeUnMessage(struct Paquet* paquet) {
+    return paquet->token != 0;
+}
 
-void traiterPacket(struct Packet* packet) {
-    if (lePacketPossedeUnMessage(packet)) { // pas de massage
-        printf("pas de packet gen d'un packet à destination de 8000\n");
-        packet->token = 0;
-        packet->source = udpPortEnvoie;
-        packet->destination = 8000;
-        strcpy(packet->payload, "salut");
-    }
-    else {
-        //packet 
-        if (lePacketMestDestiner(packet)) {
-            printf("packet reçu : \n %s", packet->payload);
-            printf("set packet vide");
-            packet->token = 1;
+int lePaquetEstDeMoi(struct Paquet* paquet, int index) {
+    return paquet->source[index] == udpPortEnvoie;
+}
+
+void traiterPaquet(struct Paquet* paquet) {
+
+    int canSend = 1;
+
+    if (lePaquetPossedeUnMessage(paquet)) {
+        for (int indexPaquet = 0; indexPaquet < 3; indexPaquet++)
+        {
+            if (lePaquetMestDestiner(paquet, indexPaquet)) {
+                canSend = 0;
+
+                printf("paquet reçu : \n %s", paquet->payload[indexPaquet]);
+                printf("set paquet vide\n");
+                printf("index paquet %d\n", indexPaquet);
+                paquet->token = paquet->token & ~(1 << indexPaquet);
+            }
+            if (lePaquetEstDeMoi(paquet, indexPaquet)) {
+                canSend = 1;
+
+                printf("Destinataire pas trouvé : %d\n", paquet->source[indexPaquet]);
+                printf("set paquet vide\n");
+                printf("index paquet %d\n", indexPaquet);
+                paquet->token = paquet->token & ~(1 << indexPaquet);
+            }
         }
-        else {
-            printf("transfert du packet ");
+    }
+    if (canSend)
+    {
+        // pas de paquet je trouve un slot libre et je gen un paquet
+        for (int indexPaquet = 0; indexPaquet < 3; indexPaquet++)
+        {
+            if ((paquet->token & (1 << indexPaquet)) == 0) { // slot libre
+                printf("Pas de paquet gen d'un message\n j'utilise index %d\n", indexPaquet);
+                paquet->token = paquet->token | (1 << indexPaquet); //On modifie la valeur token pour occuper le slot.
+                paquet->source[indexPaquet] = udpPortEnvoie;
+
+                int destinataire = 0;
+                do {
+                    destinataire = (rand() % (8003 - 8000 + 1)) + 8000;
+                } while (destinataire == udpPortReception);
+                paquet->destination[indexPaquet] = destinataire;
+                printf("Envoi du message a %d\n", destinataire);
+
+                strcpy(paquet->payload[indexPaquet], getRandomDuckMessage());
+                break;
+            }
         }
+
     }
 }
-
 
 int main(int argc, char* argv[]) {
+
+    srand(time(NULL));
+
     int sock_S;
     struct sockaddr_in sockAddrReception;
     struct sockaddr_in sockAddrEnvoie;
@@ -74,6 +127,7 @@ int main(int argc, char* argv[]) {
     sock_S = socket(PF_INET, SOCK_DGRAM, 0);
     perror("socket S :");
 
+
     //setup socket S reception
     bzero((char*)&sockAddrReception, sizeof(struct sockaddr));
     sockAddrReception.sin_family = PF_INET;
@@ -90,18 +144,15 @@ int main(int argc, char* argv[]) {
     sockAddrEnvoie.sin_addr.s_addr = inet_addr("127.0.0.1");
     sockAddrEnvoie.sin_port = htons(udpPortEnvoie);
 
-
     taille_sa = sizeof(struct sockaddr);
 
     while (1) {
-        struct Packet packet;
-        struct sockaddr_in sockAddrRecvFrom;
-        recvfrom(sock_S, &packet, sizeof(struct Packet), 0, (struct sockaddr*)&sockAddrRecvFrom, &taille_sa);
+        struct Paquet paquet;
+        recvfrom(sock_S, &paquet, sizeof(struct Paquet), 0, NULL, &taille_sa);
         perror("reception du paquet");
-        printf("address reception %d\n", sockAddrRecvFrom.sin_port);
         sleep(2);
-        traiterPacket(&packet);
-        sendto(sock_S, &packet, sizeof(struct Packet), 0, (struct sockaddr*)&sockAddrEnvoie, taille_sa);
+        traiterPaquet(&paquet);
+        sendto(sock_S, &paquet, sizeof(struct Paquet), 0, (struct sockaddr*)&sockAddrEnvoie, taille_sa);
         perror("renvoie du paquet");
     }
 

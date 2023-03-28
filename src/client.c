@@ -1,56 +1,46 @@
-#include <sys/socket.h>
-#include <sys/un.h>
+#include <sys/types.h>
 #include <netinet/in.h>
-#include <arpa/inet.h>
-#include <string.h> 
-#include <unistd.h>
-#include <stdio.h>
 #include <stdlib.h>
+#include <stdio.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
+#define IP "127.0.0.1"
+
+int main(int argc, char* argv[]) {
 
 
-#define IP_addr "127.0.0.1"
-//82.66.143.165
-int main() {
-    int sock_C;
-    struct sockaddr_in sa_S;
-    unsigned int taille_sa_S;
-    char buffer[120];
-
-    printf("port client : \n");
-    int udpPort = 0;
-    scanf("%d", &udpPort);
-
-
-
-
-    sock_C = socket(PF_INET, SOCK_DGRAM, 0);
-    perror("socket");
-    bzero((char*)&sa_S, sizeof(struct sockaddr));
-    sa_S.sin_family = AF_INET;
-    sa_S.sin_addr.s_addr = inet_addr(IP_addr);
-    sa_S.sin_port = htons(udpPort);
-
-    taille_sa_S = sizeof(struct sockaddr_in);
-
-    struct Message {
+    struct Paquet {
         int token;
-        int source;
-        int destination;
-        char payload[255];
+        int source[3];
+        int destination[3];
+        char payload[3][255];
     };
 
-    struct Message message;
-    message.token = 1;
-    sendto(sock_C, &message, sizeof(struct Message), 0, (struct sockaddr*)&sa_S, taille_sa_S);
+    int UDP_Port;
+
+    if (argc == 2)
+        UDP_Port = atoi(argv[1]);
+    else {
+        printf("Sur quel port lancer la boucle ?\n");
+        scanf("%d", &UDP_Port);
+    }
+    int sockFD = socket(PF_INET, SOCK_DGRAM, 0);
+
+    struct sockaddr_in sa;
+    sa.sin_family = AF_INET;
+    sa.sin_addr.s_addr = inet_addr(IP);
+    sa.sin_port = htons(UDP_Port);
+
+    socklen_t tailleSA_IN = sizeof(struct sockaddr_in);
+
+    struct Paquet message;
+    message.token = 0;
+
+    sendto(sockFD, &message, sizeof(struct Paquet), 0, (struct sockaddr*)&sa, tailleSA_IN);
     perror("sendto");
 
-    recvfrom(sock_C, buffer, 120 * sizeof(char), 0, (struct sockaddr*)&sa_S, &taille_sa_S);
-    perror("recvfrom");
-
-    printf("%s", buffer);
-
-    close(sock_C);
-    perror("close");
+    close(sockFD);
 
     exit(EXIT_SUCCESS);
 }
